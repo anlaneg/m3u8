@@ -35,6 +35,7 @@ type Downloader struct {
 
 // NewTask returns a Task instance
 func NewTask(output string, url string) (*Downloader, error) {
+    /*请求url,并获得result*/
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -42,27 +43,36 @@ func NewTask(output string, url string) (*Downloader, error) {
 	var folder string
 	// If no output folder specified, use current directory
 	if output == "" {
+	    /*默认使用当前目录*/
 		current, err := tool.CurrentDir()
 		if err != nil {
 			return nil, err
 		}
 		folder = filepath.Join(current, output)
 	} else {
+	    /*使用用户指定的目录*/
 		folder = output
 	}
+
+	/*创建folder*/
 	if err := os.MkdirAll(folder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
+	/*创建ts folder*/
 	tsFolder := filepath.Join(folder, tsFolderName)
 	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
+
+	/*构造downloader*/
 	d := &Downloader{
 		folder:   folder,
 		tsFolder: tsFolder,
 		result:   result,
 	}
+	/*指明总分片数*/
 	d.segLen = len(result.M3u8.Segments)
+	/*为各分片指定job id，创建job 队列*/
 	d.queue = genSlice(d.segLen)
 	return d, nil
 }
@@ -73,6 +83,7 @@ func (d *Downloader) Start(concurrency int) error {
 	// struct{} zero size
 	limitChan := make(chan struct{}, concurrency)
 	for {
+	    /*取等执行job*/
 		tsIdx, end, err := d.next()
 		if err != nil {
 			if end {
@@ -83,7 +94,9 @@ func (d *Downloader) Start(concurrency int) error {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			/*针对idx号job执行download*/
 			if err := d.download(idx); err != nil {
+			    /*download时出错，将job扔回*/
 				// Back into the queue, retry request
 				fmt.Printf("[failed] %s\n", err.Error())
 				if err := d.back(idx); err != nil {
@@ -95,15 +108,18 @@ func (d *Downloader) Start(concurrency int) error {
 		limitChan <- struct{}{}
 	}
 	wg.Wait()
+	/*任务完成，执行merge*/
 	if err := d.merge(); err != nil {
 		return err
 	}
 	return nil
 }
 
+/*执行segIndex号块的下载*/
 func (d *Downloader) download(segIndex int) error {
 	tsFilename := tsFilename(segIndex)
 	tsUrl := d.tsURL(segIndex)
+	/*请求tsurl*/
 	b, e := tool.Get(tsUrl)
 	if e != nil {
 		return fmt.Errorf("request %s, %s", tsUrl, e.Error())
@@ -112,10 +128,13 @@ func (d *Downloader) download(segIndex int) error {
 	defer b.Close()
 	fPath := filepath.Join(d.tsFolder, tsFilename)
 	fTemp := fPath + tsTempFileSuffix
+	/*创建临时文件*/
 	f, err := os.Create(fTemp)
 	if err != nil {
 		return fmt.Errorf("create file: %s, %s", tsFilename, err.Error())
 	}
+
+	/*拿到tsUrl对应内容*/
 	bytes, err := ioutil.ReadAll(b)
 	if err != nil {
 		return fmt.Errorf("read bytes: %s, %s", tsUrl, err.Error())
@@ -124,8 +143,10 @@ func (d *Downloader) download(segIndex int) error {
 	if sf == nil {
 		return fmt.Errorf("invalid segment index: %d", segIndex)
 	}
+	/*获得此seg对应的key*/
 	key, ok := d.result.Keys[sf.KeyIndex]
 	if ok && key != "" {
+	    /*针对内容进行解密*/
 		bytes, err = tool.AES128Decrypt(bytes, []byte(key),
 			[]byte(d.result.M3u8.Keys[sf.KeyIndex].IV))
 		if err != nil {
@@ -153,8 +174,10 @@ func (d *Downloader) download(segIndex int) error {
 		return err
 	}
 	// Maybe it will be safer in this way...
+	/*增加完成的job*/
 	atomic.AddInt32(&d.finish, 1)
 	//tool.DrawProgressBar("Downloading", float32(d.finish)/float32(d.segLen), progressWidth)
+	/*显示进度*/
 	fmt.Printf("[download %6.2f%%] %s\n", float32(d.finish)/float32(d.segLen)*100, tsUrl)
 	return nil
 }
@@ -165,6 +188,7 @@ func (d *Downloader) next() (segIndex int, end bool, err error) {
 	if len(d.queue) == 0 {
 		err = fmt.Errorf("queue empty")
 		if d.finish == int32(d.segLen) {
+		    /*队列为空，且均完成*/
 			end = true
 			return
 		}
@@ -172,11 +196,14 @@ func (d *Downloader) next() (segIndex int, end bool, err error) {
 		end = false
 		return
 	}
+
+	/*取队首的任务*/
 	segIndex = d.queue[0]
 	d.queue = d.queue[1:]
 	return
 }
 
+/*将segIndex号job回弹，稍后重试*/
 func (d *Downloader) back(segIndex int) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -187,6 +214,7 @@ func (d *Downloader) back(segIndex int) error {
 	return nil
 }
 
+/*执行文件合并*/
 func (d *Downloader) merge() error {
 	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 	missingCount := 0

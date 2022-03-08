@@ -22,6 +22,7 @@ func AES128Encrypt(origData, key, iv []byte) ([]byte, error) {
 	return crypted, nil
 }
 
+/*AES128Dec解密*/
 func AES128Decrypt(crypted, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

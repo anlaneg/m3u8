@@ -21,6 +21,7 @@ func init() {
 }
 
 func main() {
+    /*命令行解析*/
 	flag.Parse()
 	defer func() {
 		if r := recover(); r != nil {
@@ -37,10 +38,14 @@ func main() {
 	if chanSize <= 0 {
 		panic("parameter 'c' must be greater than 0")
 	}
+
+	/*创建 downloader task*/
 	downloader, err := dl.NewTask(output, url)
 	if err != nil {
 		panic(err)
 	}
+
+	/*执行download task*/
 	if err := downloader.Start(chanSize); err != nil {
 		panic(err)
 	}
