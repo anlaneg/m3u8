@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/oopsguy/m3u8/dl"
+	"github.com/anlaneg/m3u8/dl"
 )
 
 var (
@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	
 	/*执行download task*/
 	if err := downloader.Start(chanSize); err != nil {
 		panic(err)

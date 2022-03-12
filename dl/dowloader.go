@@ -10,8 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/tool"
+	"github.com/anlaneg/m3u8/parse"
+	"github.com/anlaneg/m3u8/tool"
+	"strings"
 )
 
 const (
@@ -31,6 +32,7 @@ type Downloader struct {
 	segLen   int
 
 	result *parse.Result
+	fileName string
 }
 
 // NewTask returns a Task instance
@@ -74,6 +76,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 	d.segLen = len(result.M3u8.Segments)
 	/*为各分片指定job id，创建job 队列*/
 	d.queue = genSlice(d.segLen)
+	d.fileName = genFileName(url)
 	return d, nil
 }
 
@@ -230,7 +233,8 @@ func (d *Downloader) merge() error {
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	//mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	mFilePath := filepath.Join(d.folder, d.fileName)
 	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())
@@ -279,4 +283,11 @@ func genSlice(len int) []int {
 		s = append(s, i)
 	}
 	return s
+}
+
+func genFileName(url string) string {
+	url=strings.Replace(url,":","_",-1)
+	url=strings.Replace(url,"/","_",-1)
+	url=strings.Replace(url," ","-",-1)
+	return url + ".ts"
 }
