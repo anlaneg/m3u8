@@ -9,19 +9,21 @@ import (
 )
 
 var (
-	url      string
-	output   string
-	chanSize int
+	url          string
+	output       string
+	chanSize     int
+	continueFlag bool
 )
 
 func init() {
 	flag.StringVar(&url, "u", "", "M3U8 URL, required")
 	flag.IntVar(&chanSize, "c", 25, "Maximum number of occurrences")
 	flag.StringVar(&output, "o", "", "Output folder, required")
+	flag.BoolVar(&continueFlag, "C", true, "continue download")
 }
 
 func main() {
-    /*命令行解析*/
+	/*命令行解析*/
 	flag.Parse()
 	defer func() {
 		if r := recover(); r != nil {
@@ -29,6 +31,8 @@ func main() {
 			os.Exit(-1)
 		}
 	}()
+
+	/*参数检查*/
 	if url == "" {
 		panicParameter("u")
 	}
@@ -44,9 +48,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	
+
 	/*执行download task*/
-	if err := downloader.Start(chanSize); err != nil {
+	if err := downloader.Start(chanSize, continueFlag); err != nil {
 		panic(err)
 	}
 	fmt.Println("Done!")

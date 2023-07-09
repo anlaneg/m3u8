@@ -19,7 +19,7 @@ type Result struct {
 func FromURL(link string) (*Result, error) {
 	u, err := url.Parse(link)
 	if err != nil {
-	    /*uri有误*/
+		/*uri有误*/
 		return nil, err
 	}
 	link = u.String()
@@ -36,7 +36,7 @@ func FromURL(link string) (*Result, error) {
 		return nil, err
 	}
 
-    /*playlist不为空，取首个playlist,递归处理*/
+	/*playlist不为空，取首个playlist,递归处理*/
 	if len(m3u8.MasterPlaylist) != 0 {
 		sf := m3u8.MasterPlaylist[0]
 		return FromURL(tool.ResolveURL(u, sf.URI))
@@ -48,16 +48,16 @@ func FromURL(link string) (*Result, error) {
 	}
 
 	result := &Result{
-		URL:  u,/*uri*/
-		M3u8: m3u8,/*m3u8对象*/
-		Keys: make(map[int]string),/*对应的所有key*/
+		URL:  u,                    /*uri*/
+		M3u8: m3u8,                 /*m3u8对象*/
+		Keys: make(map[int]string), /*对应的所有key*/
 	}
 
-    /*遍历收集的所有key*/
+	/*遍历收集的所有key*/
 	for idx, key := range m3u8.Keys {
 		switch {
 		case key.Method == "" || key.Method == CryptMethodNONE:
-		    /*不加密，跳过key获取*/
+			/*不加密，跳过key获取*/
 			continue
 		case key.Method == CryptMethodAES:
 			// Request URL to extract decryption key

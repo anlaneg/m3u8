@@ -10,7 +10,7 @@ import (
 )
 
 func CurrentDir(joinPath ...string) (string, error) {
-    /*取当前目录*/
+	/*取当前目录*/
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
 		return "", err
@@ -22,13 +22,13 @@ func CurrentDir(joinPath ...string) (string, error) {
 }
 
 func ResolveURL(u *url.URL, p string) string {
-    /*https,http处理*/
+	/*https,http处理*/
 	if strings.HasPrefix(p, "https://") || strings.HasPrefix(p, "http://") {
 		return p
 	}
 	var baseURL string
 	if strings.Index(p, "/") == 0 {
-	    /*绝对地址*/
+		/*绝对地址*/
 		baseURL = u.Scheme + "://" + u.Host
 	} else {
 		tU := u.String()

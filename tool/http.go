@@ -17,7 +17,7 @@ func Get(url string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
-	    /*对端返回非200，执行报错*/
+		/*对端返回非200，执行报错*/
 		return nil, fmt.Errorf("http error: status code %d", resp.StatusCode)
 	}
 	/*返回响应内容*/

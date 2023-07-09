@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	tsExt            = ".ts"
-	tsFolderName     = "ts"
-	mergeTSFilename  = "main.ts"
-	tsTempFileSuffix = "_tmp"
-	progressWidth    = 40
+	tsExt               = ".ts"
+	tsFolderName        = "ts"
+	mergeTSFilename     = "main.ts"
+	finishStateFileName = ".finished"
+	tsTempFileSuffix    = "_tmp"
+	progressWidth       = 40
 )
 
 type Downloader struct {
@@ -31,13 +32,14 @@ type Downloader struct {
 	finish   int32
 	segLen   int
 
-	result *parse.Result
-	fileName string
+	result      *parse.Result
+	fileName    string
+	finishState *FinishState
 }
 
 // NewTask returns a Task instance
 func NewTask(output string, url string) (*Downloader, error) {
-    /*请求url,并获得result*/
+	/*请求url,并获得result*/
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -45,14 +47,14 @@ func NewTask(output string, url string) (*Downloader, error) {
 	var folder string
 	// If no output folder specified, use current directory
 	if output == "" {
-	    /*默认使用当前目录*/
+		/*默认使用当前目录*/
 		current, err := tool.CurrentDir()
 		if err != nil {
 			return nil, err
 		}
 		folder = filepath.Join(current, output)
 	} else {
-	    /*使用用户指定的目录*/
+		/*使用用户指定的目录*/
 		folder = output
 	}
 
@@ -68,10 +70,19 @@ func NewTask(output string, url string) (*Downloader, error) {
 
 	/*构造downloader*/
 	d := &Downloader{
-		folder:   folder,
-		tsFolder: tsFolder,
-		result:   result,
+		folder:      folder,
+		tsFolder:    tsFolder,
+		result:      result,
+		finishState: nil,
 	}
+
+	/*加载finish状态*/
+	state, err := d.loadFinishState()
+	if err != nil {
+		return nil, fmt.Errorf("load finish state '[%s]' failed: %s", filepath.Join(tsFolder, finishStateFileName), err.Error())
+	}
+	d.finishState = state
+
 	/*指明总分片数*/
 	d.segLen = len(result.M3u8.Segments)
 	/*为各分片指定job id，创建job 队列*/
@@ -81,12 +92,12 @@ func NewTask(output string, url string) (*Downloader, error) {
 }
 
 // Start runs downloader
-func (d *Downloader) Start(concurrency int) error {
+func (d *Downloader) Start(concurrency int, continueFlag bool) error {
 	var wg sync.WaitGroup
 	// struct{} zero size
 	limitChan := make(chan struct{}, concurrency)
 	for {
-	    /*取等执行job*/
+		/*取等执行job*/
 		tsIdx, end, err := d.next()
 		if err != nil {
 			if end {
@@ -98,8 +109,8 @@ func (d *Downloader) Start(concurrency int) error {
 		go func(idx int) {
 			defer wg.Done()
 			/*针对idx号job执行download*/
-			if err := d.download(idx); err != nil {
-			    /*download时出错，将job扔回*/
+			if err := d.proxyDownload(idx, continueFlag); err != nil {
+				/*download时出错，将job扔回*/
 				// Back into the queue, retry request
 				fmt.Printf("[failed] %s\n", err.Error())
 				if err := d.back(idx); err != nil {
@@ -116,6 +127,45 @@ func (d *Downloader) Start(concurrency int) error {
 		return err
 	}
 	return nil
+}
+
+func (d *Downloader) proxyDownload(segIndex int, continueFlag bool) error {
+	//tsFilename := tsFilename(segIndex)
+	tsUrl := d.tsURL(segIndex)
+	sign := "c"
+	/*检查idx是否之前已完成下载*/
+	finish := d.isFinished(segIndex)
+	if !continueFlag || !finish {
+		if err := d.download(segIndex); err != nil {
+			return err
+		}
+	}
+
+	/*增加完成的job*/
+	atomic.AddInt32(&d.finish, 1)
+	if !finish {
+		err := d.updateFinishState(segIndex)
+		if err != nil {
+			return err
+		}
+		sign = "n"
+	}
+	//tool.DrawProgressBar("Downloading", float32(d.finish)/float32(d.segLen), progressWidth)
+	/*显示进度*/
+	fmt.Printf("[download(%s) %6.2f%%] %s\n", sign, float32(d.finish)/float32(d.segLen)*100, tsUrl)
+	return nil
+}
+
+func (d *Downloader) loadFinishState() (*FinishState, error) {
+	return LoadFinishState(filepath.Join(d.tsFolder, finishStateFileName))
+}
+
+func (d *Downloader) isFinished(segIndex int) bool {
+	return d.finishState.isFinished(segIndex)
+}
+
+func (d *Downloader) updateFinishState(segIndex int) error {
+	return d.finishState.updateFinishState(segIndex, filepath.Join(d.tsFolder, finishStateFileName))
 }
 
 /*执行segIndex号块的下载*/
@@ -149,7 +199,7 @@ func (d *Downloader) download(segIndex int) error {
 	/*获得此seg对应的key*/
 	key, ok := d.result.Keys[sf.KeyIndex]
 	if ok && key != "" {
-	    /*针对内容进行解密*/
+		/*针对内容进行解密*/
 		bytes, err = tool.AES128Decrypt(bytes, []byte(key),
 			[]byte(d.result.M3u8.Keys[sf.KeyIndex].IV))
 		if err != nil {
@@ -176,12 +226,7 @@ func (d *Downloader) download(segIndex int) error {
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
-	// Maybe it will be safer in this way...
-	/*增加完成的job*/
-	atomic.AddInt32(&d.finish, 1)
-	//tool.DrawProgressBar("Downloading", float32(d.finish)/float32(d.segLen), progressWidth)
-	/*显示进度*/
-	fmt.Printf("[download %6.2f%%] %s\n", float32(d.finish)/float32(d.segLen)*100, tsUrl)
+
 	return nil
 }
 
@@ -191,7 +236,7 @@ func (d *Downloader) next() (segIndex int, end bool, err error) {
 	if len(d.queue) == 0 {
 		err = fmt.Errorf("queue empty")
 		if d.finish == int32(d.segLen) {
-		    /*队列为空，且均完成*/
+			/*队列为空，且均完成*/
 			end = true
 			return
 		}
@@ -286,8 +331,8 @@ func genSlice(len int) []int {
 }
 
 func genFileName(url string) string {
-	url=strings.Replace(url,":","_",-1)
-	url=strings.Replace(url,"/","_",-1)
-	url=strings.Replace(url," ","-",-1)
+	url = strings.Replace(url, ":", "_", -1)
+	url = strings.Replace(url, "/", "_", -1)
+	url = strings.Replace(url, " ", "-", -1)
 	return url + ".ts"
 }
