@@ -300,15 +300,15 @@ func (d *Downloader) merge() error {
 		tool.DrawProgressBar("merge",
 			float32(mergedCount)/float32(d.segLen), progressWidth)
 	}
-	_ = writer.Flush()
-	// Remove `ts` folder
-	_ = os.RemoveAll(d.tsFolder)
 
+	_ = writer.Flush()
 	if mergedCount != d.segLen {
 		fmt.Printf("[warning] \n%d files merge failed", d.segLen-mergedCount)
-	}
-
-	fmt.Printf("\n[output] %s\n", mFilePath)
+	} else {
+		// Remove `ts` folder
+		_ = os.RemoveAll(d.tsFolder)
+		fmt.Printf("\n[output] %s\n", mFilePath)
+    }
 
 	return nil
 }
