@@ -49,6 +49,11 @@ func main() {
 		panic(err)
 	}
 
+	if downloader.IsExist() {
+		fmt.Printf("*****%s****exists\n", downloader.GetFileName())
+		os.Exit(0)
+	}
+
 	/*执行download task*/
 	if err := downloader.Start(chanSize, continueFlag); err != nil {
 		panic(err)

@@ -318,6 +318,19 @@ func (d *Downloader) tsURL(segIndex int) string {
 	return tool.ResolveURL(d.result.URL, seg.URI)
 }
 
+func (d *Downloader) IsExist() bool {
+	mFilePath := filepath.Join(d.folder, d.fileName)
+	exist, err := path_exists(mFilePath)
+	if err != nil {
+		return false
+	}
+
+	return exist
+}
+func (d *Downloader) GetFileName() string {
+	return d.fileName
+}
+
 func tsFilename(ts int) string {
 	return strconv.Itoa(ts) + tsExt
 }
