@@ -28,25 +28,29 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("[error]", r)
-			os.Exit(-1)
+			os.Exit(0)
 		}
 	}()
 
 	/*参数检查*/
 	if url == "" {
-		panicParameter("u")
+		panic("parameter '" + "u" + "' is required")
+		os.Exit(0)
 	}
 	if output == "" {
-		panicParameter("o")
+		panic("parameter '" + "o" + "' is required")
+		os.Exit(0)
 	}
 	if chanSize <= 0 {
-		panic("parameter 'c' must be greater than 0")
+		fmt.Println("parameter 'c' must be greater than 0")
+		os.Exit(0)
 	}
 
 	/*创建 downloader task*/
 	downloader, err := dl.NewTask(output, url)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(0)
 	}
 
 	if downloader.IsExist() {
@@ -56,11 +60,12 @@ func main() {
 
 	/*执行download task*/
 	if err := downloader.Start(chanSize, continueFlag); err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(0)
 	}
 	fmt.Println("Done!")
 }
 
-func panicParameter(name string) {
+/*func panicParameter(name string) {
 	panic("parameter '" + name + "' is required")
-}
+}*/
