@@ -24,9 +24,14 @@ const (
 	progressWidth       = 40
 )
 
+type FileSlice struct {
+	segId int
+	tries int
+}
+
 type Downloader struct {
 	lock     sync.Mutex
-	queue    []int
+	queue    []*FileSlice
 	folder   string
 	tsFolder string
 	finish   int32
@@ -92,13 +97,13 @@ func NewTask(output string, url string) (*Downloader, error) {
 }
 
 // Start runs downloader
-func (d *Downloader) Start(concurrency int, continueFlag bool) error {
+func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) error {
 	var wg sync.WaitGroup
 	// struct{} zero size
 	limitChan := make(chan struct{}, concurrency)
 	for {
 		/*取等执行job*/
-		tsIdx, end, err := d.next()
+		slice, end, err := d.next()
 		if err != nil {
 			if end {
 				break
@@ -106,19 +111,24 @@ func (d *Downloader) Start(concurrency int, continueFlag bool) error {
 			continue
 		}
 		wg.Add(1)
-		go func(idx int) {
+		go func(idx int, tries int) {
 			defer wg.Done()
 			/*针对idx号job执行download*/
 			if err := d.proxyDownload(idx, continueFlag); err != nil {
 				/*download时出错，将job扔回*/
-				// Back into the queue, retry request
-				fmt.Printf("[failed] %s\n", err.Error())
-				if err := d.back(idx); err != nil {
-					fmt.Printf(err.Error())
+				tries = tries + 1
+				if maxTries <= 0 || tries < maxTries {
+					// Back into the queue, retry request
+					fmt.Printf("[failed] %s\n", err.Error())
+					if err := d.back(idx,tries); err != nil {
+						fmt.Printf(err.Error())
+					}
+				} else {
+					fmt.Printf("[failed & giveup] %s\n", err.Error())
 				}
 			}
 			<-limitChan
-		}(tsIdx)
+		}(slice.segId,slice.tries)
 		limitChan <- struct{}{}
 	}
 	wg.Wait()
@@ -230,7 +240,7 @@ func (d *Downloader) download(segIndex int) error {
 	return nil
 }
 
-func (d *Downloader) next() (segIndex int, end bool, err error) {
+func (d *Downloader) next() (slice *FileSlice, end bool, err error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	if len(d.queue) == 0 {
@@ -246,19 +256,19 @@ func (d *Downloader) next() (segIndex int, end bool, err error) {
 	}
 
 	/*取队首的任务*/
-	segIndex = d.queue[0]
+	slice = d.queue[0]
 	d.queue = d.queue[1:]
 	return
 }
 
 /*将segIndex号job回弹，稍后重试*/
-func (d *Downloader) back(segIndex int) error {
+func (d *Downloader) back(segIndex int,tries int) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	if sf := d.result.M3u8.Segments[segIndex]; sf == nil {
 		return fmt.Errorf("invalid segment index: %d", segIndex)
 	}
-	d.queue = append(d.queue, segIndex)
+	d.queue = append(d.queue, &FileSlice{segId:segIndex,tries:tries,})
 	return nil
 }
 
@@ -335,10 +345,10 @@ func tsFilename(ts int) string {
 	return strconv.Itoa(ts) + tsExt
 }
 
-func genSlice(len int) []int {
-	s := make([]int, 0)
+func genSlice(len int) []*FileSlice {
+	s := make([]*FileSlice, 0)
 	for i := 0; i < len; i++ {
-		s = append(s, i)
+		s = append(s, &FileSlice{segId:i,tries:0,})
 	}
 	return s
 }

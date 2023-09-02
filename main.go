@@ -13,6 +13,7 @@ var (
 	output       string
 	chanSize     int
 	continueFlag bool
+	maxTries     int
 )
 
 func init() {
@@ -20,11 +21,13 @@ func init() {
 	flag.IntVar(&chanSize, "c", 25, "Maximum number of occurrences")
 	flag.StringVar(&output, "o", "", "Output folder, required")
 	flag.BoolVar(&continueFlag, "C", true, "continue download")
+	flag.IntVar(&maxTries, "m", -1, "Maximum number of try")
 }
 
 func main() {
 	/*命令行解析*/
 	flag.Parse()
+	
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("[error]", r)
@@ -45,6 +48,9 @@ func main() {
 		fmt.Println("parameter 'c' must be greater than 0")
 		os.Exit(0)
 	}
+	if maxTries <= 0 {
+		maxTries = -1
+	}
 
 	/*创建 downloader task*/
 	downloader, err := dl.NewTask(output, url)
@@ -59,7 +65,7 @@ func main() {
 	}
 
 	/*执行download task*/
-	if err := downloader.Start(chanSize, continueFlag); err != nil {
+	if err := downloader.Start(chanSize, continueFlag, maxTries); err != nil {
 		fmt.Println(err)
 		os.Exit(0)
 	}
