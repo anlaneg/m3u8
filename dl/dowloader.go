@@ -92,7 +92,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 	d.segLen = len(result.M3u8.Segments)
 	/*为各分片指定job id，创建job 队列*/
 	d.queue = genSlice(d.segLen)
-	d.fileName = genFileName(url)
+	d.fileName = GenFileName(url)
 	return d, nil
 }
 
@@ -353,7 +353,7 @@ func genSlice(len int) []*FileSlice {
 	return s
 }
 
-func genFileName(url string) string {
+func GenFileName(url string) string {
 	url = strings.Replace(url, ":", "_", -1)
 	url = strings.Replace(url, "/", "_", -1)
 	url = strings.Replace(url, " ", "-", -1)
