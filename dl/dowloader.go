@@ -119,7 +119,7 @@ func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) err
 				tries = tries + 1
 				if maxTries <= 0 || tries < maxTries {
 					// Back into the queue, retry request
-					fmt.Printf("[failed] %s\n", err.Error())
+					fmt.Printf("[failed(%d/%d)] %s\n", tries, maxTries, err.Error())
 					if err := d.back(idx,tries); err != nil {
 						fmt.Printf(err.Error())
 					}
