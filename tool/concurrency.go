@@ -69,7 +69,7 @@ func ConcurrencyTaskRun(run ConcurrencyRun, tasks []interface{}) {
 				wg.Done()
 			}()
 			if err := run.DoTask(task); err != nil {
-				fmt.Printf("c.DoTask failed %s\n",err.Error())
+				fmt.Printf("c.DoTask failed %s\n", err.Error())
 			}
 		}()
 		limitChan <- 1

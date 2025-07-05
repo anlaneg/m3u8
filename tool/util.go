@@ -1,13 +1,13 @@
 package tool
 
 import (
+	"bufio"
 	"fmt"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"bufio"
 )
 
 func CurrentDir(joinPath ...string) (string, error) {
@@ -48,21 +48,21 @@ func DrawProgressBar(prefix string, proportion float32, width int, suffix ...str
 
 func ReadLines(filePath string) ([]string, error) {
 	readFile, err := os.Open(filePath)
-    if err != nil {
-        return nil,err
-    }
-    
-    result := make([]string,0)
-    fileScanner := bufio.NewScanner(readFile)
-    fileScanner.Split(bufio.ScanLines)
-  
-    for fileScanner.Scan() {
-    	text := fileScanner.Text()
-    	if text != "" {
-    		result = append(result,text)
-    	}
-    }
-    readFile.Close()
-    
-    return result,nil
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0)
+	fileScanner := bufio.NewScanner(readFile)
+	fileScanner.Split(bufio.ScanLines)
+
+	for fileScanner.Scan() {
+		text := fileScanner.Text()
+		if text != "" {
+			result = append(result, text)
+		}
+	}
+	readFile.Close()
+
+	return result, nil
 }
