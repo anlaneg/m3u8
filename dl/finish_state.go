@@ -5,11 +5,20 @@ import (
 	"os"
 	"sync"
 	//"fmt"
+	"strings"
 )
 
+type State struct {
+	Finish   bool   `json:"state"`
+	SegIndex int    `json:"index"`
+	TsUrl    string `json:"url"`
+}
+
 type FinishState struct {
-	lock     sync.Mutex
-	state map[int]bool
+	lock sync.Mutex
+	//state map[int]bool
+	//exState map[int]State
+	state map[int]State
 }
 
 func path_exists(path string) (bool, error) {
@@ -30,7 +39,8 @@ func load(path string) (*FinishState, error) {
 	}
 	defer file.Close()
 
-	state := make(map[int]bool)
+	state := make(map[int]State)
+	//state := make(map[int]bool)
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&state)
 	if err != nil {
@@ -42,18 +52,22 @@ func load(path string) (*FinishState, error) {
 	}, nil
 }
 
-func LoadFinishState(path string) (*FinishState, error) {
+func LoadFinishState(url string, path string) (*FinishState, error) {
 	isExist, _ := path_exists(path)
 	if isExist {
 		return load(path)
 	}
 
 	f := &FinishState{
-		state: make(map[int]bool),
+		state: make(map[int]State),
 	}
 
 	f.lock.Lock()
-	f.state[-1] = false
+	f.state[-1] = State{
+		Finish:   false,
+		SegIndex: -1,
+		TsUrl:    url,
+	}
 	defer f.lock.Unlock()
 	if err := f.save(path); err != nil {
 		return nil, err
@@ -89,18 +103,36 @@ func (f *FinishState) save(path string) error {
 func (f *FinishState) isFinished(segIndex int) bool {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	value, ok := f.state[segIndex]
+	meta, ok := f.state[segIndex]
 	if !ok {
 		return false
 	}
 
-	return value
+	return meta.Finish
 }
 
-func (f *FinishState) updateFinishState(segIndex int, path string) error {
+func (f *FinishState) isMatched(segIndex int, text string) (bool, string) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.state[segIndex] = true
+	meta, ok := f.state[segIndex]
+	if !ok {
+		return false, ""
+	}
+
+	if strings.Contains(meta.TsUrl, text) {
+		return true, meta.TsUrl
+	}
+	return false, ""
+}
+
+func (f *FinishState) updateFinishState(segIndex int, path string, tsUrl string) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.state[segIndex] = State{
+		Finish:   true,
+		SegIndex: segIndex,
+		TsUrl:    tsUrl,
+	}
 	return f.save(path)
 	//return nil
 }

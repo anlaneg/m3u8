@@ -82,7 +82,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 	}
 
 	/*加载finish状态*/
-	state, err := d.loadFinishState()
+	state, err := d.loadFinishState(url)
 	if err != nil {
 		return nil, fmt.Errorf("load finish state '[%s]' failed: %s", filepath.Join(tsFolder, finishStateFileName), err.Error())
 	}
@@ -120,7 +120,7 @@ func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) err
 				if maxTries <= 0 || tries < maxTries {
 					// Back into the queue, retry request
 					fmt.Printf("[failed(%d/%d)] %s\n", tries, maxTries, err.Error())
-					if err := d.back(idx,tries); err != nil {
+					if err := d.back(idx, tries); err != nil {
 						fmt.Printf(err.Error())
 					}
 				} else {
@@ -128,7 +128,7 @@ func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) err
 				}
 			}
 			<-limitChan
-		}(slice.segId,slice.tries)
+		}(slice.segId, slice.tries)
 		limitChan <- struct{}{}
 	}
 	wg.Wait()
@@ -154,7 +154,7 @@ func (d *Downloader) proxyDownload(segIndex int, continueFlag bool) error {
 	/*增加完成的job*/
 	atomic.AddInt32(&d.finish, 1)
 	if !finish {
-		err := d.updateFinishState(segIndex)
+		err := d.updateFinishState(segIndex, tsUrl)
 		if err != nil {
 			return err
 		}
@@ -166,16 +166,20 @@ func (d *Downloader) proxyDownload(segIndex int, continueFlag bool) error {
 	return nil
 }
 
-func (d *Downloader) loadFinishState() (*FinishState, error) {
-	return LoadFinishState(filepath.Join(d.tsFolder, finishStateFileName))
+func (d *Downloader) loadFinishState(url string) (*FinishState, error) {
+	return LoadFinishState(url, filepath.Join(d.tsFolder, finishStateFileName))
 }
 
 func (d *Downloader) isFinished(segIndex int) bool {
 	return d.finishState.isFinished(segIndex)
 }
 
-func (d *Downloader) updateFinishState(segIndex int) error {
-	return d.finishState.updateFinishState(segIndex, filepath.Join(d.tsFolder, finishStateFileName))
+func (d *Downloader) isMatched(segIndex int, text string) (bool, string) {
+	return d.finishState.isMatched(segIndex, text)
+}
+
+func (d *Downloader) updateFinishState(segIndex int, tsUrl string) error {
+	return d.finishState.updateFinishState(segIndex, filepath.Join(d.tsFolder, finishStateFileName), tsUrl)
 }
 
 /*执行segIndex号块的下载*/
@@ -262,18 +266,19 @@ func (d *Downloader) next() (slice *FileSlice, end bool, err error) {
 }
 
 /*将segIndex号job回弹，稍后重试*/
-func (d *Downloader) back(segIndex int,tries int) error {
+func (d *Downloader) back(segIndex int, tries int) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	if sf := d.result.M3u8.Segments[segIndex]; sf == nil {
 		return fmt.Errorf("invalid segment index: %d", segIndex)
 	}
-	d.queue = append(d.queue, &FileSlice{segId:segIndex,tries:tries,})
+	d.queue = append(d.queue, &FileSlice{segId: segIndex, tries: tries})
 	return nil
 }
 
 /*执行文件合并*/
 func (d *Downloader) merge() error {
+	//return fmt.Errorf("skip.... merge")
 	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 	missingCount := 0
 	for idx := 0; idx < d.segLen; idx++ {
@@ -283,6 +288,7 @@ func (d *Downloader) merge() error {
 			missingCount++
 		}
 	}
+
 	if missingCount > 0 {
 		fmt.Printf("[warning] %d files missing\n", missingCount)
 	}
@@ -299,7 +305,13 @@ func (d *Downloader) merge() error {
 
 	writer := bufio.NewWriter(mFile)
 	mergedCount := 0
+	skipCount := 0
 	for segIndex := 0; segIndex < d.segLen; segIndex++ {
+		if match, _ := d.isMatched(segIndex, "adjump"); match {
+			//fmt.Printf("[warning] skip file %s\n\n", url)
+			skipCount++
+			continue
+		}
 		tsFilename := tsFilename(segIndex)
 		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
 		_, err = writer.Write(bytes)
@@ -312,13 +324,15 @@ func (d *Downloader) merge() error {
 	}
 
 	_ = writer.Flush()
-	if mergedCount != d.segLen {
-		fmt.Printf("[warning] \n%d files merge failed", d.segLen-mergedCount)
-	} else {
-		// Remove `ts` folder
-		_ = os.RemoveAll(d.tsFolder)
-		fmt.Printf("\n[output] %s\n", mFilePath)
-    }
+	//if (mergedCount + skipCount) != d.segLen {
+	fmt.Printf("[warning] files merge failed(miss %d, skip %d) ", d.segLen-(mergedCount+skipCount), skipCount)
+	//} else {
+
+	//return fmt.Errorf("skip.... merge")
+	// Remove `ts` folder
+	_ = os.RemoveAll(d.tsFolder)
+	fmt.Printf("\n[output] %s\n", mFilePath)
+	//}
 
 	return nil
 }
@@ -348,7 +362,7 @@ func tsFilename(ts int) string {
 func genSlice(len int) []*FileSlice {
 	s := make([]*FileSlice, 0)
 	for i := 0; i < len; i++ {
-		s = append(s, &FileSlice{segId:i,tries:0,})
+		s = append(s, &FileSlice{segId: i, tries: 0})
 	}
 	return s
 }

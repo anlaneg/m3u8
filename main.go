@@ -27,7 +27,7 @@ func init() {
 func main() {
 	/*命令行解析*/
 	flag.Parse()
-	
+
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("[error]", r)
