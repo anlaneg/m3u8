@@ -124,6 +124,7 @@ func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) err
 						fmt.Printf(err.Error())
 					}
 				} else {
+					atomic.AddInt32(&d.finish, 1)
 					fmt.Printf("[failed & giveup] %s\n", err.Error())
 				}
 			}
@@ -137,6 +138,16 @@ func (d *Downloader) Start(concurrency int, continueFlag bool, maxTries int) err
 		return err
 	}
 	return nil
+}
+
+func getLastString(str string, length int) string {
+	end := len(str)
+    startIndex := end - length
+    if startIndex < 0 {
+        startIndex = 0
+    }
+
+    return str[startIndex:end]
 }
 
 func (d *Downloader) proxyDownload(segIndex int, continueFlag bool) error {
@@ -162,7 +173,7 @@ func (d *Downloader) proxyDownload(segIndex int, continueFlag bool) error {
 	}
 	//tool.DrawProgressBar("Downloading", float32(d.finish)/float32(d.segLen), progressWidth)
 	/*显示进度*/
-	fmt.Printf("[download(%s) %6.2f%%] %s\n", sign, float32(d.finish)/float32(d.segLen)*100, tsUrl)
+	fmt.Printf("\r[download(%s) %6.2f%%] %s", sign, float32(d.finish)/float32(d.segLen)*100, getLastString(tsUrl, 100))
 	return nil
 }
 
