@@ -27,7 +27,7 @@ type URLTask struct {
 }
 
 func (t *URLTask) GetConcurrency() int {
-	return 25
+	return 200
 }
 
 func (t *URLTask) outputURL(url string) {
