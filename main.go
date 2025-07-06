@@ -18,7 +18,7 @@ var (
 
 func init() {
 	flag.StringVar(&url, "u", "", "M3U8 URL, required")
-	flag.IntVar(&chanSize, "c", 25, "Maximum number of occurrences")
+	flag.IntVar(&chanSize, "c", 5, "Maximum number of occurrences")
 	flag.StringVar(&output, "o", "", "Output folder, required")
 	flag.BoolVar(&continueFlag, "C", true, "continue download")
 	flag.IntVar(&maxTries, "m", -1, "Maximum number of try")
